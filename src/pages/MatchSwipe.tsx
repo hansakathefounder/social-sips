@@ -14,7 +14,7 @@ interface ProfileWithRestaurants extends DbProfile {
 
 const MatchSwipe = () => {
   const navigate = useNavigate();
-  const { user, profile } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
   const [users, setUsers] = useState<ProfileWithRestaurants[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -26,10 +26,14 @@ const MatchSwipe = () => {
   const [swipeHistory, setSwipeHistory] = useState<string[]>([]);
 
   useEffect(() => {
+    if (!authLoading && !user) {
+      navigate('/auth');
+      return;
+    }
     if (user) {
       loadPotentialMatches();
     }
-  }, [user]);
+  }, [user, authLoading, navigate]);
 
   const loadPotentialMatches = async () => {
     if (!user) return;

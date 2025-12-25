@@ -221,11 +221,11 @@ export const matchingService = {
     // Check if swipe already exists to prevent duplicates
     const { data: existingSwipe } = await supabase
       .from('swipes')
-      .select('id')
+      .select('id, direction')
       .eq('swiper_id', swiperId)
       .eq('swiped_id', swipedId)
       .maybeSingle();
-    
+
     if (existingSwipe) {
       console.log('Swipe already exists, skipping insert');
       return { matched: false };
@@ -235,12 +235,12 @@ export const matchingService = {
     const { error: swipeError } = await supabase
       .from('swipes')
       .insert({ swiper_id: swiperId, swiped_id: swipedId, direction });
-    
+
     if (swipeError) {
       console.error('Swipe insert error:', swipeError);
       throw swipeError;
     }
-    
+
     console.log('Swipe recorded successfully');
 
     if (direction === 'right') {
@@ -252,43 +252,59 @@ export const matchingService = {
         .eq('swiped_id', swiperId)
         .eq('direction', 'right')
         .maybeSingle();
-      
+
       console.log('Mutual swipe check:', mutualSwipe);
-      
+
       if (mutualSwipe) {
+        // Only create a match if users share at least 1 selected restaurant.
+        const [mySelections, theirSelections] = await Promise.all([
+          userRestaurantService.getSelected(swiperId),
+          userRestaurantService.getSelected(swipedId),
+        ]);
+
+        const shared = mySelections.filter((id) => theirSelections.includes(id));
+        if (shared.length === 0) {
+          return { matched: false };
+        }
+
+        const sharedRestaurantId = shared[0];
+
         // Check if match already exists
         const { data: existingMatch } = await supabase
           .from('matches')
           .select('id')
-          .or(`and(user1_id.eq.${swiperId},user2_id.eq.${swipedId}),and(user1_id.eq.${swipedId},user2_id.eq.${swiperId})`)
+          .or(
+            `and(user1_id.eq.${swiperId},user2_id.eq.${swipedId}),and(user1_id.eq.${swipedId},user2_id.eq.${swiperId})`
+          )
           .maybeSingle();
-        
+
         if (existingMatch) {
           console.log('Match already exists:', existingMatch.id);
           return { matched: true, matchId: existingMatch.id };
         }
-        
-        // Create a match
+
+        // Create a match (store the shared restaurant when there's only 1 overlap too)
         const { data: match, error: matchError } = await supabase
           .from('matches')
           .insert({
             user1_id: swiperId,
             user2_id: swipedId,
-            status: 'accepted'
+            shared_restaurant_id: sharedRestaurantId,
+            status: 'accepted',
           })
           .select()
           .single();
-        
+
         if (matchError) {
           console.error('Match creation error:', matchError);
           throw matchError;
         }
-        
+
         console.log('Match created:', match);
         return { matched: true, matchId: match.id };
       }
     }
-    
+
     return { matched: false };
   },
 

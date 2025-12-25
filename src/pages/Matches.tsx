@@ -19,15 +19,20 @@ interface MatchWithUser extends DbMatch {
 }
 
 const Matches = () => {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [matches, setMatches] = useState<MatchWithUser[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!authLoading && !user) {
+      // Redirect unauthenticated users
+      window.location.assign('/auth');
+      return;
+    }
     if (user) {
       loadMatches();
     }
-  }, [user]);
+  }, [user, authLoading]);
 
   const loadMatches = async () => {
     if (!user) return;
