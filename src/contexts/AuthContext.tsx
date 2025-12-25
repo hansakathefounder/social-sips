@@ -43,7 +43,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = async (userId: string, userName?: string | null) => {
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
@@ -52,6 +52,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     
     if (!error && data) {
       setProfile(data);
+    } else if (!data && !error) {
+      // Profile doesn't exist - create one
+      console.log('Profile not found, creating one for user:', userId);
+      const { data: newProfile, error: insertError } = await supabase
+        .from('profiles')
+        .insert({ user_id: userId, name: userName || 'User' })
+        .select()
+        .single();
+      
+      if (!insertError && newProfile) {
+        setProfile(newProfile);
+        console.log('Profile created:', newProfile);
+      } else {
+        console.error('Failed to create profile:', insertError);
+      }
     }
   };
 
@@ -65,7 +80,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         // Defer profile fetch to avoid deadlock
         if (session?.user) {
           setTimeout(() => {
-            fetchProfile(session.user.id);
+            fetchProfile(session.user.id, session.user.user_metadata?.name || session.user.email);
           }, 0);
         } else {
           setProfile(null);
@@ -79,7 +94,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser(session?.user ?? null);
       
       if (session?.user) {
-        fetchProfile(session.user.id);
+        fetchProfile(session.user.id, session.user.user_metadata?.name || session.user.email);
       }
       setLoading(false);
     });

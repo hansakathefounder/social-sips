@@ -218,12 +218,30 @@ export const matchingService = {
   },
 
   swipe: async (swiperId: string, swipedId: string, direction: 'left' | 'right'): Promise<{ matched: boolean; matchId?: string }> => {
+    // Check if swipe already exists to prevent duplicates
+    const { data: existingSwipe } = await supabase
+      .from('swipes')
+      .select('id')
+      .eq('swiper_id', swiperId)
+      .eq('swiped_id', swipedId)
+      .maybeSingle();
+    
+    if (existingSwipe) {
+      console.log('Swipe already exists, skipping insert');
+      return { matched: false };
+    }
+
     // Record the swipe
     const { error: swipeError } = await supabase
       .from('swipes')
       .insert({ swiper_id: swiperId, swiped_id: swipedId, direction });
     
-    if (swipeError) throw swipeError;
+    if (swipeError) {
+      console.error('Swipe insert error:', swipeError);
+      throw swipeError;
+    }
+    
+    console.log('Swipe recorded successfully');
 
     if (direction === 'right') {
       // Check if the other user also swiped right
@@ -235,7 +253,21 @@ export const matchingService = {
         .eq('direction', 'right')
         .maybeSingle();
       
+      console.log('Mutual swipe check:', mutualSwipe);
+      
       if (mutualSwipe) {
+        // Check if match already exists
+        const { data: existingMatch } = await supabase
+          .from('matches')
+          .select('id')
+          .or(`and(user1_id.eq.${swiperId},user2_id.eq.${swipedId}),and(user1_id.eq.${swipedId},user2_id.eq.${swiperId})`)
+          .maybeSingle();
+        
+        if (existingMatch) {
+          console.log('Match already exists:', existingMatch.id);
+          return { matched: true, matchId: existingMatch.id };
+        }
+        
         // Create a match
         const { data: match, error: matchError } = await supabase
           .from('matches')
@@ -247,8 +279,12 @@ export const matchingService = {
           .select()
           .single();
         
-        if (matchError) throw matchError;
+        if (matchError) {
+          console.error('Match creation error:', matchError);
+          throw matchError;
+        }
         
+        console.log('Match created:', match);
         return { matched: true, matchId: match.id };
       }
     }
@@ -371,5 +407,108 @@ export const profileService = {
     
     if (error) throw error;
     return updated;
+  }
+};
+
+// Owner/Restaurant Management APIs
+export const ownerService = {
+  getMyRestaurant: async (ownerId: string): Promise<DbRestaurant | null> => {
+    const { data, error } = await supabase
+      .from('restaurants')
+      .select('*')
+      .eq('owner_id', ownerId)
+      .maybeSingle();
+    
+    if (error) throw error;
+    return data;
+  },
+
+  createRestaurant: async (ownerId: string, restaurant: {
+    name: string;
+    address: string;
+    latitude: number;
+    longitude: number;
+    is_byob?: boolean;
+    description?: string;
+    cuisine?: string;
+    phone?: string;
+  }): Promise<DbRestaurant> => {
+    const { data, error } = await supabase
+      .from('restaurants')
+      .insert({
+        ...restaurant,
+        owner_id: ownerId,
+        is_byob: restaurant.is_byob ?? false
+      })
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
+  },
+
+  updateRestaurant: async (restaurantId: string, updateData: {
+    name?: string;
+    address?: string;
+    description?: string;
+    cuisine?: string;
+    phone?: string;
+    website?: string;
+    is_byob?: boolean;
+    latitude?: number;
+    longitude?: number;
+    photos?: string[];
+    features?: string[];
+  }): Promise<DbRestaurant> => {
+    const { data: updated, error } = await supabase
+      .from('restaurants')
+      .update(updateData)
+      .eq('id', restaurantId)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return updated;
+  },
+
+  getReservations: async (restaurantId: string) => {
+    const { data, error } = await supabase
+      .from('reservations')
+      .select('*')
+      .eq('restaurant_id', restaurantId)
+      .order('date', { ascending: true });
+    
+    if (error) throw error;
+    return data || [];
+  },
+
+  assignOwnerRole: async (userId: string): Promise<void> => {
+    // Check if user already has owner role
+    const { data: existing } = await supabase
+      .from('user_roles')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('role', 'restaurant_owner')
+      .maybeSingle();
+    
+    if (!existing) {
+      const { error } = await supabase
+        .from('user_roles')
+        .insert({ user_id: userId, role: 'restaurant_owner' });
+      
+      if (error) throw error;
+    }
+  },
+
+  hasOwnerRole: async (userId: string): Promise<boolean> => {
+    const { data, error } = await supabase
+      .from('user_roles')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('role', 'restaurant_owner')
+      .maybeSingle();
+    
+    if (error) throw error;
+    return !!data;
   }
 };
