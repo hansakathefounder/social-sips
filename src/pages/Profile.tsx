@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Edit3, 
@@ -11,30 +11,85 @@ import {
   Shield,
   Bell,
   HelpCircle,
-  Crown
+  Crown,
+  LogIn
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
-import { mockCurrentUser, mockRestaurants } from '@/data/mockData';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
+import { userRestaurantService, restaurantService, matchingService } from '@/services/supabaseApi';
 
 const Profile = () => {
   const navigate = useNavigate();
-  const [user] = useState(mockCurrentUser);
+  const { user, profile, signOut, loading } = useAuth();
+  const [selectedRestaurants, setSelectedRestaurants] = useState<string[]>([]);
+  const [restaurantNames, setRestaurantNames] = useState<string[]>([]);
+  const [matchCount, setMatchCount] = useState(0);
+  const [loadingData, setLoadingData] = useState(true);
 
-  const selectedRestaurantNames = user.selectedRestaurants
-    .map(id => mockRestaurants.find(r => r.id === id)?.name)
-    .filter(Boolean);
+  useEffect(() => {
+    if (!loading && !user) {
+      navigate('/auth');
+    }
+  }, [user, loading, navigate]);
 
-  const handleSignOut = () => {
+  useEffect(() => {
+    if (user) {
+      loadUserData();
+    }
+  }, [user]);
+
+  const loadUserData = async () => {
+    if (!user) return;
+    
+    setLoadingData(true);
+    try {
+      // Load selected restaurants
+      const selections = await userRestaurantService.getSelected(user.id);
+      setSelectedRestaurants(selections);
+
+      // Get restaurant names
+      if (selections.length > 0) {
+        const restaurants = await restaurantService.getAll();
+        const names = selections
+          .map(id => restaurants.find(r => r.id === id)?.name)
+          .filter(Boolean) as string[];
+        setRestaurantNames(names);
+      }
+
+      // Get match count
+      const matches = await matchingService.getMatches(user.id);
+      setMatchCount(matches.length);
+    } catch (error) {
+      console.error('Failed to load user data:', error);
+    } finally {
+      setLoadingData(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
     toast({
       title: "Signed out",
       description: "You have been signed out successfully.",
     });
     navigate('/');
   };
+
+  if (loading || !user || !profile) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center h-[calc(100vh-56px-80px)]">
+          <div className="animate-pulse">
+            <Wine className="w-12 h-12 text-drink-gold" />
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
 
   const menuItems = [
     { icon: Edit3, label: 'Edit Profile', action: () => toast({ title: "Coming soon", description: "Profile editing will be available soon." }) },
@@ -59,31 +114,36 @@ const Profile = () => {
           <div className="relative flex items-start gap-4">
             {/* Avatar */}
             <div className="relative">
-              <img
-                src={user.avatar}
-                alt={user.name}
-                className="w-24 h-24 rounded-2xl object-cover border-2 border-primary/50"
-              />
+              <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-drink-gold to-drink-amber flex items-center justify-center border-2 border-primary/50">
+                {profile.avatar_url ? (
+                  <img
+                    src={profile.avatar_url}
+                    alt={profile.name}
+                    className="w-full h-full rounded-2xl object-cover"
+                  />
+                ) : (
+                  <span className="text-4xl font-display font-bold text-drink-dark">
+                    {profile.name.charAt(0).toUpperCase()}
+                  </span>
+                )}
+              </div>
               <button className="absolute -bottom-2 -right-2 w-8 h-8 rounded-full bg-primary flex items-center justify-center shadow-lg">
                 <Camera className="w-4 h-4 text-primary-foreground" />
               </button>
-              {user.verified && (
-                <div className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-drink-cyan flex items-center justify-center">
-                  <span className="text-xs">✓</span>
-                </div>
-              )}
             </div>
 
             {/* Info */}
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
                 <h1 className="font-display text-2xl font-bold text-foreground">
-                  {user.name}
+                  {profile.name}
                 </h1>
-                <span className="text-xl text-muted-foreground">{user.age}</span>
+                {profile.age && (
+                  <span className="text-xl text-muted-foreground">{profile.age}</span>
+                )}
               </div>
               <p className="text-sm text-muted-foreground mb-3">
-                {user.bio}
+                {profile.bio || 'No bio yet'}
               </p>
               <Button variant="outline" size="sm" className="gap-1.5">
                 <Edit3 className="w-3.5 h-3.5" />
@@ -101,10 +161,10 @@ const Profile = () => {
           className="grid grid-cols-3 gap-3 mb-6"
         >
           {[
-            { icon: Wine, value: '12', label: 'Matches' },
-            { icon: MapPin, value: '6', label: 'Spots' },
-            { icon: Star, value: '4.8', label: 'Rating' },
-          ].map((stat, i) => (
+            { icon: Wine, value: matchCount.toString(), label: 'Matches' },
+            { icon: MapPin, value: selectedRestaurants.length.toString(), label: 'Spots' },
+            { icon: Star, value: '0', label: 'Reviews' },
+          ].map((stat) => (
             <div
               key={stat.label}
               className="glass rounded-xl p-4 text-center"
@@ -129,14 +189,14 @@ const Profile = () => {
             <h2 className="font-display font-semibold text-foreground">
               My Drinking Spots
             </h2>
-            <Button variant="ghost" size="sm" className="text-primary">
+            <Button variant="ghost" size="sm" className="text-primary" onClick={() => navigate('/match')}>
               Edit
             </Button>
           </div>
           
-          {selectedRestaurantNames.length > 0 ? (
+          {restaurantNames.length > 0 ? (
             <div className="flex flex-wrap gap-2">
-              {selectedRestaurantNames.map((name, i) => (
+              {restaurantNames.map((name, i) => (
                 <span
                   key={i}
                   className="px-3 py-1.5 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20"
@@ -168,14 +228,18 @@ const Profile = () => {
             </Button>
           </div>
           <div className="flex flex-wrap gap-2">
-            {user.interests.map((interest, i) => (
-              <span
-                key={i}
-                className="px-3 py-1.5 rounded-full text-xs font-medium bg-secondary text-secondary-foreground"
-              >
-                {interest}
-              </span>
-            ))}
+            {profile.interests && profile.interests.length > 0 ? (
+              profile.interests.map((interest, i) => (
+                <span
+                  key={i}
+                  className="px-3 py-1.5 rounded-full text-xs font-medium bg-secondary text-secondary-foreground"
+                >
+                  {interest}
+                </span>
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground">No interests added yet</p>
+            )}
           </div>
         </motion.div>
 

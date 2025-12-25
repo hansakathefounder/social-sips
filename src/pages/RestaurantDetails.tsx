@@ -13,13 +13,13 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { restaurantApi } from '@/services/api';
-import { Restaurant } from '@/data/mockData';
+import { restaurantService, reviewService, DbRestaurant } from '@/services/supabaseApi';
 import { cn } from '@/lib/utils';
 
 const RestaurantDetails = () => {
   const { id } = useParams<{ id: string }>();
-  const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
+  const [restaurant, setRestaurant] = useState<DbRestaurant | null>(null);
+  const [reviews, setReviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [isFavorite, setIsFavorite] = useState(false);
@@ -32,8 +32,13 @@ const RestaurantDetails = () => {
     if (!id) return;
     setLoading(true);
     try {
-      const data = await restaurantApi.getById(id);
-      setRestaurant(data || null);
+      const data = await restaurantService.getById(id);
+      setRestaurant(data);
+
+      if (data) {
+        const reviewData = await reviewService.getForRestaurant(id);
+        setReviews(reviewData);
+      }
     } catch (error) {
       console.error('Failed to load restaurant:', error);
     } finally {
@@ -60,7 +65,8 @@ const RestaurantDetails = () => {
     );
   }
 
-  const menuCategories = [...new Set(restaurant.menu.map(item => item.category))];
+  const photos = restaurant.photos || ['https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800'];
+  const features = restaurant.features || [];
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -68,7 +74,7 @@ const RestaurantDetails = () => {
       <div className="relative h-72">
         <motion.img
           key={activeImageIndex}
-          src={restaurant.photos[activeImageIndex]}
+          src={photos[activeImageIndex]}
           alt={restaurant.name}
           className="w-full h-full object-cover"
           initial={{ opacity: 0 }}
@@ -99,20 +105,22 @@ const RestaurantDetails = () => {
         </div>
 
         {/* Image Dots */}
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
-          {restaurant.photos.map((_, i) => (
-            <button
-              key={i}
-              onClick={() => setActiveImageIndex(i)}
-              className={cn(
-                "w-2 h-2 rounded-full transition-all",
-                i === activeImageIndex 
-                  ? "bg-primary w-6" 
-                  : "bg-foreground/30 hover:bg-foreground/50"
-              )}
-            />
-          ))}
-        </div>
+        {photos.length > 1 && (
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
+            {photos.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setActiveImageIndex(i)}
+                className={cn(
+                  "w-2 h-2 rounded-full transition-all",
+                  i === activeImageIndex 
+                    ? "bg-primary w-6" 
+                    : "bg-foreground/30 hover:bg-foreground/50"
+                )}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Content */}
@@ -121,14 +129,14 @@ const RestaurantDetails = () => {
         <div className="glass rounded-2xl p-5 mb-4">
           <div className="flex items-start justify-between mb-3">
             <div>
-              <span className={restaurant.isByob ? 'byob-badge' : 'no-byob-badge'}>
-                {restaurant.isByob ? '🍾 BYOB Friendly' : '🍸 Full Bar'}
+              <span className={restaurant.is_byob ? 'byob-badge' : 'no-byob-badge'}>
+                {restaurant.is_byob ? '🍾 BYOB Friendly' : '🍸 Full Bar'}
               </span>
             </div>
             <div className="flex items-center gap-1 text-sm">
               <Star className="w-4 h-4 fill-primary text-primary" />
-              <span className="font-semibold text-foreground">{restaurant.rating}</span>
-              <span className="text-muted-foreground">({restaurant.reviewCount})</span>
+              <span className="font-semibold text-foreground">{restaurant.rating || 0}</span>
+              <span className="text-muted-foreground">({restaurant.review_count || 0})</span>
             </div>
           </div>
 
@@ -137,21 +145,20 @@ const RestaurantDetails = () => {
           </h1>
 
           <p className="text-sm text-muted-foreground mb-4">
-            {restaurant.description}
+            {restaurant.description || 'No description available'}
           </p>
 
           <div className="flex flex-wrap gap-2">
-            {restaurant.cuisine.map((c, i) => (
-              <span 
-                key={i}
-                className="px-3 py-1 rounded-full text-xs font-medium bg-secondary text-secondary-foreground"
-              >
-                {c}
+            {restaurant.cuisine && (
+              <span className="px-3 py-1 rounded-full text-xs font-medium bg-secondary text-secondary-foreground">
+                {restaurant.cuisine}
               </span>
-            ))}
-            <span className="px-3 py-1 rounded-full text-xs font-medium bg-secondary text-secondary-foreground">
-              {'$'.repeat(restaurant.priceRange)}
-            </span>
+            )}
+            {restaurant.price_range && (
+              <span className="px-3 py-1 rounded-full text-xs font-medium bg-secondary text-secondary-foreground">
+                {'$'.repeat(restaurant.price_range)}
+              </span>
+            )}
           </div>
         </div>
 
@@ -163,7 +170,7 @@ const RestaurantDetails = () => {
               <span className="text-xs">Hours</span>
             </div>
             <p className="text-sm font-medium text-foreground">
-              {restaurant.openingHours}
+              Open Now
             </p>
           </div>
           <div className="glass rounded-xl p-4">
@@ -172,7 +179,7 @@ const RestaurantDetails = () => {
               <span className="text-xs">Phone</span>
             </div>
             <p className="text-sm font-medium text-foreground">
-              {restaurant.phone}
+              {restaurant.phone || 'N/A'}
             </p>
           </div>
         </div>
@@ -187,7 +194,12 @@ const RestaurantDetails = () => {
               <p className="text-sm font-medium text-foreground mb-1">
                 {restaurant.address}
               </p>
-              <a href="#" className="text-xs text-primary font-medium">
+              <a 
+                href={`https://www.google.com/maps/search/?api=1&query=${restaurant.latitude},${restaurant.longitude}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-primary font-medium"
+              >
                 Get Directions →
               </a>
             </div>
@@ -195,60 +207,26 @@ const RestaurantDetails = () => {
         </div>
 
         {/* Features */}
-        <div className="mb-6">
-          <h2 className="font-display font-semibold text-lg text-foreground mb-3">
-            Features
-          </h2>
-          <div className="flex flex-wrap gap-2">
-            {restaurant.features.map((feature, i) => (
-              <span 
-                key={i}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-drink-cyan/10 text-drink-cyan border border-drink-cyan/20"
-              >
-                <Check className="w-3 h-3" />
-                {feature}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        {/* Menu */}
-        <div className="mb-6">
-          <h2 className="font-display font-semibold text-lg text-foreground mb-3">
-            Menu Highlights
-          </h2>
-          {menuCategories.map((category) => (
-            <div key={category} className="mb-4">
-              <h3 className="text-sm font-medium text-muted-foreground mb-2">
-                {category}
-              </h3>
-              <div className="space-y-2">
-                {restaurant.menu
-                  .filter(item => item.category === category)
-                  .map((item) => (
-                    <div 
-                      key={item.id}
-                      className="flex items-center justify-between p-3 rounded-xl bg-card/50 border border-border/50"
-                    >
-                      <div>
-                        <p className="text-sm font-medium text-foreground">
-                          {item.name}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {item.description}
-                        </p>
-                      </div>
-                      <span className="text-sm font-semibold text-primary">
-                        Rs. {item.price.toLocaleString()}
-                      </span>
-                    </div>
-                  ))}
-              </div>
+        {features.length > 0 && (
+          <div className="mb-6">
+            <h2 className="font-display font-semibold text-lg text-foreground mb-3">
+              Features
+            </h2>
+            <div className="flex flex-wrap gap-2">
+              {features.map((feature, i) => (
+                <span 
+                  key={i}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-drink-cyan/10 text-drink-cyan border border-drink-cyan/20"
+                >
+                  <Check className="w-3 h-3" />
+                  {feature}
+                </span>
+              ))}
             </div>
-          ))}
-        </div>
+          </div>
+        )}
 
-        {/* Reviews Preview */}
+        {/* Reviews */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-display font-semibold text-lg text-foreground">
@@ -258,22 +236,47 @@ const RestaurantDetails = () => {
               See all <ChevronRight className="w-4 h-4" />
             </button>
           </div>
-          <div className="glass rounded-xl p-4">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-full bg-secondary" />
-              <div>
-                <p className="text-sm font-medium text-foreground">Happy Diner</p>
-                <div className="flex items-center gap-1">
-                  {[1,2,3,4,5].map((i) => (
-                    <Star key={i} className="w-3 h-3 fill-primary text-primary" />
-                  ))}
+          
+          {reviews.length > 0 ? (
+            <div className="space-y-3">
+              {reviews.slice(0, 3).map((review) => (
+                <div key={review.id} className="glass rounded-xl p-4">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-drink-gold to-drink-amber flex items-center justify-center">
+                      <span className="text-sm font-bold text-drink-dark">
+                        {review.profiles?.name?.charAt(0) || 'U'}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-foreground">
+                        {review.profiles?.name || 'Anonymous'}
+                      </p>
+                      <div className="flex items-center gap-1">
+                        {[1,2,3,4,5].map((i) => (
+                          <Star 
+                            key={i} 
+                            className={cn(
+                              "w-3 h-3",
+                              i <= review.rating ? "fill-primary text-primary" : "text-muted-foreground"
+                            )} 
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  {review.comment && (
+                    <p className="text-sm text-muted-foreground">{review.comment}</p>
+                  )}
                 </div>
-              </div>
+              ))}
             </div>
-            <p className="text-sm text-muted-foreground">
-              "Amazing atmosphere and the BYOB policy is perfect! Brought our own wine and had a fantastic evening."
-            </p>
-          </div>
+          ) : (
+            <div className="glass rounded-xl p-4">
+              <p className="text-sm text-muted-foreground text-center">
+                No reviews yet. Be the first to review!
+              </p>
+            </div>
+          )}
         </div>
       </div>
 

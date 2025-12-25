@@ -1,23 +1,44 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Map, List, X } from 'lucide-react';
+import { Map, List, X, LogIn } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { RestaurantMap } from '@/components/restaurant/RestaurantMap';
 import { RestaurantCard } from '@/components/restaurant/RestaurantCard';
 import { Button } from '@/components/ui/button';
-import { restaurantApi } from '@/services/api';
-import { Restaurant } from '@/data/mockData';
+import { restaurantService, DbRestaurant } from '@/services/supabaseApi';
+import { useAuth } from '@/contexts/AuthContext';
 
 type ViewMode = 'map' | 'list';
 type FilterType = 'all' | 'byob' | 'bar';
 
+// Adapter to convert DB restaurant to component format
+const adaptRestaurant = (r: DbRestaurant) => ({
+  id: r.id,
+  name: r.name,
+  description: r.description || '',
+  isByob: r.is_byob,
+  address: r.address,
+  latitude: r.latitude,
+  longitude: r.longitude,
+  rating: r.rating || 0,
+  reviewCount: r.review_count || 0,
+  priceRange: (r.price_range || 2) as 1 | 2 | 3 | 4,
+  cuisine: r.cuisine ? [r.cuisine] : [],
+  photos: r.photos || [],
+  menu: [],
+  openingHours: '',
+  phone: r.phone || '',
+  features: r.features || [],
+});
+
 const Index = () => {
   const navigate = useNavigate();
-  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  const { user, loading: authLoading } = useAuth();
+  const [restaurants, setRestaurants] = useState<DbRestaurant[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('map');
   const [filter, setFilter] = useState<FilterType>('all');
-  const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
+  const [selectedRestaurant, setSelectedRestaurant] = useState<ReturnType<typeof adaptRestaurant> | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -27,13 +48,13 @@ const Index = () => {
   const loadRestaurants = async () => {
     setLoading(true);
     try {
-      let data: Restaurant[];
+      let data: DbRestaurant[];
       if (filter === 'all') {
-        data = await restaurantApi.getAll();
+        data = await restaurantService.getAll();
+      } else if (filter === 'byob') {
+        data = await restaurantService.getByFilters({ isByob: true });
       } else {
-        data = await restaurantApi.getByFilters({ 
-          isByob: filter === 'byob' 
-        });
+        data = await restaurantService.getByFilters({ isByob: false });
       }
       setRestaurants(data);
     } catch (error) {
@@ -43,13 +64,28 @@ const Index = () => {
     }
   };
 
-  const filteredRestaurants = restaurants;
+  const adaptedRestaurants = restaurants.map(adaptRestaurant);
 
   return (
     <AppLayout>
       <div className="relative h-[calc(100vh-56px-80px)]">
+        {/* Auth Button - Top Right */}
+        {!authLoading && !user && (
+          <div className="absolute top-4 right-4 z-50">
+            <Button
+              variant="gold"
+              size="sm"
+              onClick={() => navigate('/auth')}
+              className="gap-1.5"
+            >
+              <LogIn className="w-4 h-4" />
+              Sign In
+            </Button>
+          </div>
+        )}
+
         {/* View Toggle & Filters */}
-        <div className="absolute top-4 left-4 right-4 z-40 flex items-center justify-between gap-3">
+        <div className="absolute top-4 left-4 z-40 flex items-center gap-3">
           {/* View Toggle */}
           <div className="flex items-center gap-1 p-1 rounded-xl glass">
             <Button
@@ -99,8 +135,8 @@ const Index = () => {
               className="absolute inset-0 z-10"
             >
               <RestaurantMap
-                restaurants={filteredRestaurants}
-                onRestaurantSelect={setSelectedRestaurant}
+                restaurants={adaptedRestaurants}
+                onRestaurantSelect={(r) => setSelectedRestaurant(r)}
                 selectedId={selectedRestaurant?.id}
               />
 
@@ -148,7 +184,7 @@ const Index = () => {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {filteredRestaurants.map((restaurant, i) => (
+                  {adaptedRestaurants.map((restaurant, i) => (
                     <motion.div
                       key={restaurant.id}
                       initial={{ opacity: 0, y: 20 }}
@@ -175,7 +211,7 @@ const Index = () => {
               variant="match"
               size="lg"
               className="rounded-full shadow-elevated px-6"
-              onClick={() => navigate('/match')}
+              onClick={() => user ? navigate('/match') : navigate('/auth')}
             >
               <span className="text-lg mr-1">🍷</span>
               Find Someone to Drink With
