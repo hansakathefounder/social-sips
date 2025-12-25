@@ -1,32 +1,67 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, ArrowRight } from 'lucide-react';
+import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { RestaurantCard } from '@/components/restaurant/RestaurantCard';
-import { restaurantApi, userApi } from '@/services/api';
-import { Restaurant } from '@/data/mockData';
+import { restaurantService, userRestaurantService, DbRestaurant } from '@/services/supabaseApi';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
+import { Restaurant } from '@/data/mockData';
 
 const MAX_SELECTIONS = 3;
 
+// Transform DB restaurant to the format expected by RestaurantCard
+const transformRestaurant = (r: DbRestaurant): Restaurant => ({
+  id: r.id,
+  name: r.name,
+  description: r.description || '',
+  address: r.address,
+  cuisine: r.cuisine ? [r.cuisine] : [],
+  priceRange: (r.price_range || 2) as 1 | 2 | 3 | 4,
+  rating: r.rating || 0,
+  reviewCount: r.review_count || 0,
+  photos: r.photos || [],
+  isByob: r.is_byob,
+  features: r.features || [],
+  latitude: r.latitude,
+  longitude: r.longitude,
+  phone: r.phone || '',
+  openingHours: typeof r.opening_hours === 'string' ? r.opening_hours : '',
+  menu: [],
+});
+
 const Match = () => {
   const navigate = useNavigate();
-  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  const { user } = useAuth();
+  const [restaurants, setRestaurants] = useState<DbRestaurant[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadRestaurants();
-  }, []);
+    if (user) {
+      loadRestaurants();
+    }
+  }, [user]);
 
   const loadRestaurants = async () => {
     setLoading(true);
     try {
-      const data = await restaurantApi.getAll();
+      const data = await restaurantService.getAll();
       setRestaurants(data);
+      
+      // Load existing selections
+      if (user) {
+        const existingSelections = await userRestaurantService.getSelected(user.id);
+        setSelectedIds(existingSelections);
+      }
     } catch (error) {
       console.error('Failed to load restaurants:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load restaurants",
+        variant: "destructive"
+      });
     } finally {
       setLoading(false);
     }
@@ -58,12 +93,42 @@ const Match = () => {
       return;
     }
 
-    await userApi.updateSelectedRestaurants(selectedIds);
-    navigate('/match/swipe');
+    if (!user) {
+      toast({
+        title: "Please log in",
+        description: "You need to be logged in to continue",
+        variant: "destructive"
+      });
+      navigate('/auth');
+      return;
+    }
+
+    try {
+      await userRestaurantService.updateSelections(user.id, selectedIds);
+      navigate('/match/swipe');
+    } catch (error) {
+      console.error('Failed to save selections:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save your selections",
+        variant: "destructive"
+      });
+    }
   };
 
-  const byobRestaurants = restaurants.filter(r => r.isByob);
-  const barRestaurants = restaurants.filter(r => !r.isByob);
+  const byobRestaurants = restaurants.filter(r => r.is_byob);
+  const barRestaurants = restaurants.filter(r => !r.is_byob);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+          <p className="text-muted-foreground">Loading restaurants...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -128,7 +193,7 @@ const Match = () => {
                   transition={{ delay: i * 0.05 }}
                 >
                   <RestaurantCard
-                    restaurant={restaurant}
+                    restaurant={transformRestaurant(restaurant)}
                     variant="compact"
                     selectable
                     selected={selectedIds.includes(restaurant.id)}
@@ -161,7 +226,7 @@ const Match = () => {
                   transition={{ delay: i * 0.05 }}
                 >
                   <RestaurantCard
-                    restaurant={restaurant}
+                    restaurant={transformRestaurant(restaurant)}
                     variant="compact"
                     selectable
                     selected={selectedIds.includes(restaurant.id)}
