@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, X, Heart, RotateCcw, Star } from 'lucide-react';
-import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { UserCard } from '@/components/matching/UserCard';
 import { matchingApi, userApi } from '@/services/api';
@@ -172,19 +172,17 @@ const MatchSwipe = () => {
                 matchedRestaurantNames={getMatchedRestaurantNames(currentUser)}
               />
               
-              {/* Swipe indicators */}
-              <motion.div
-                className="absolute top-8 left-8 px-4 py-2 rounded-lg bg-drink-red/90 text-white font-bold text-xl rotate-[-15deg]"
-                style={{ opacity: useTransform(useMotionValue(0), [0, -100], [0, 1]) }}
-              >
-                NOPE
-              </motion.div>
-              <motion.div
-                className="absolute top-8 right-8 px-4 py-2 rounded-lg bg-drink-green/90 text-white font-bold text-xl rotate-[15deg]"
-                style={{ opacity: useTransform(useMotionValue(0), [0, 100], [0, 1]) }}
-              >
-                LIKE
-              </motion.div>
+              {/* Swipe indicators - shown based on direction */}
+              {direction === 'left' && (
+                <div className="absolute top-8 left-8 px-4 py-2 rounded-lg bg-drink-red/90 text-white font-bold text-xl rotate-[-15deg]">
+                  NOPE
+                </div>
+              )}
+              {direction === 'right' && (
+                <div className="absolute top-8 right-8 px-4 py-2 rounded-lg bg-drink-green/90 text-white font-bold text-xl rotate-[15deg]">
+                  LIKE
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
