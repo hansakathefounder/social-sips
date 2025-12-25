@@ -87,7 +87,9 @@ const MatchSwipe = () => {
     setDirection(swipeDirection);
     
     try {
+      console.log('Swiping:', { swiperId: user.id, swipedId: currentUser.user_id, direction: swipeDirection });
       const result = await matchingService.swipe(user.id, currentUser.user_id, swipeDirection);
+      console.log('Swipe result:', result);
       
       if (result.matched) {
         setMatchedUser(currentUser);
@@ -99,19 +101,21 @@ const MatchSwipe = () => {
       }
 
       setSwipeHistory(prev => [...prev, currentUser.user_id]);
+      
+      // Move to next user after animation
+      setTimeout(() => {
+        setDirection(null);
+        setCurrentIndex(prev => prev + 1);
+      }, 300);
     } catch (error) {
       console.error('Failed to record swipe:', error);
       toast({
         title: "Error",
-        description: "Failed to record your choice",
+        description: "Failed to record your choice. Please try again.",
         variant: "destructive"
       });
-    }
-
-    setTimeout(() => {
       setDirection(null);
-      setCurrentIndex(prev => prev + 1);
-    }, 300);
+    }
   };
 
   const handleUndo = () => {

@@ -3,35 +3,72 @@ import { Link } from 'react-router-dom';
 import { MessageCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { AppLayout } from '@/components/layout/AppLayout';
-import { matchingApi } from '@/services/api';
-import { Match, mockRestaurants } from '@/data/mockData';
+import { matchingService, profileService, restaurantService, DbMatch, DbProfile, DbRestaurant } from '@/services/supabaseApi';
+import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 
+interface MatchWithUser extends DbMatch {
+  user: {
+    id: string;
+    name: string;
+    avatar: string;
+  };
+  matchedRestaurantName: string | null;
+  unreadCount: number;
+  lastMessage: string | null;
+}
+
 const Matches = () => {
-  const [matches, setMatches] = useState<Match[]>([]);
+  const { user } = useAuth();
+  const [matches, setMatches] = useState<MatchWithUser[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadMatches();
-  }, []);
+    if (user) {
+      loadMatches();
+    }
+  }, [user]);
 
   const loadMatches = async () => {
+    if (!user) return;
+    
     setLoading(true);
     try {
-      const data = await matchingApi.getMatches();
-      setMatches(data);
+      const matchData = await matchingService.getMatches(user.id);
+      console.log('Loaded matches:', matchData);
+      
+      // Load restaurants for name lookup
+      const allRestaurants = await restaurantService.getAll();
+      
+      // Load profiles for each match
+      const matchesWithUsers: MatchWithUser[] = await Promise.all(
+        matchData.map(async (match) => {
+          const otherUserId = match.user1_id === user.id ? match.user2_id : match.user1_id;
+          const profile = await profileService.getById(otherUserId);
+          const restaurant = match.shared_restaurant_id 
+            ? allRestaurants.find(r => r.id === match.shared_restaurant_id) 
+            : null;
+          
+          return {
+            ...match,
+            user: {
+              id: otherUserId,
+              name: profile?.name || 'Unknown',
+              avatar: profile?.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400',
+            },
+            matchedRestaurantName: restaurant?.name || null,
+            unreadCount: 0, // TODO: implement unread count
+            lastMessage: null, // TODO: implement last message
+          };
+        })
+      );
+      
+      setMatches(matchesWithUsers);
     } catch (error) {
       console.error('Failed to load matches:', error);
     } finally {
       setLoading(false);
     }
-  };
-
-  const getRestaurantNames = (ids: string[]) => {
-    return ids
-      .map(id => mockRestaurants.find(r => r.id === id)?.name)
-      .filter(Boolean)
-      .join(', ');
   };
 
   const formatTime = (timestamp: string) => {
@@ -153,7 +190,7 @@ const Matches = () => {
                           {match.user.name}
                         </h3>
                         <span className="text-xs text-muted-foreground flex-shrink-0">
-                          {formatTime(match.matchedAt)}
+                          {formatTime(match.created_at)}
                         </span>
                       </div>
                       
@@ -166,11 +203,13 @@ const Matches = () => {
                         {match.lastMessage || 'Start a conversation!'}
                       </p>
 
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs text-primary">
-                          📍 {getRestaurantNames(match.matchedRestaurants)}
-                        </span>
-                      </div>
+                      {match.matchedRestaurantName && (
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-xs text-primary">
+                            📍 {match.matchedRestaurantName}
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     {match.unreadCount > 0 && (
