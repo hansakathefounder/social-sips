@@ -49,7 +49,7 @@ const Index = () => {
     <AppLayout>
       <div className="relative h-[calc(100vh-56px-80px)]">
         {/* View Toggle & Filters */}
-        <div className="absolute top-4 left-4 right-4 z-30 flex items-center justify-between gap-3">
+        <div className="absolute top-4 left-4 right-4 z-40 flex items-center justify-between gap-3">
           {/* View Toggle */}
           <div className="flex items-center gap-1 p-1 rounded-xl glass">
             <Button
@@ -96,7 +96,7 @@ const Index = () => {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="absolute inset-0"
+              className="absolute inset-0 z-10"
             >
               <RestaurantMap
                 restaurants={filteredRestaurants}
@@ -111,7 +111,7 @@ const Index = () => {
                     initial={{ opacity: 0, y: 100 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 100 }}
-                    className="absolute bottom-4 left-4 right-4 z-30"
+                    className="absolute bottom-20 left-4 right-4 z-30"
                   >
                     <div className="relative">
                       <button
@@ -165,7 +165,7 @@ const Index = () => {
         </AnimatePresence>
 
         {/* CTA Banner */}
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20">
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
