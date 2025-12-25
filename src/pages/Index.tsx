@@ -111,7 +111,7 @@ const Index = () => {
                     initial={{ opacity: 0, y: 100 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 100 }}
-                    className="absolute bottom-20 left-4 right-4 z-30"
+                    className="absolute bottom-36 left-4 right-4 z-30"
                   >
                     <div className="relative">
                       <button
@@ -164,8 +164,8 @@ const Index = () => {
           )}
         </AnimatePresence>
 
-        {/* CTA Banner */}
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40">
+        {/* CTA Banner - positioned above bottom nav */}
+        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-30">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}

@@ -171,11 +171,11 @@ export const RestaurantMap = ({
   }, [restaurants, selectedId, isMapReady, onRestaurantSelect]);
 
   return (
-    <div className="relative w-full h-full">
-      <div ref={mapContainer} className="absolute inset-0" />
+    <div className="relative w-full h-full min-h-[300px]">
+      <div ref={mapContainer} className="absolute inset-0 w-full h-full" style={{ minHeight: '300px' }} />
       
       {/* Map legend */}
-      <div className="absolute top-4 left-4 glass rounded-xl p-3 z-[1000]">
+      <div className="absolute top-16 left-4 glass rounded-xl p-3 z-[1000]">
         <div className="flex flex-col gap-2 text-xs">
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full bg-drink-green" />
