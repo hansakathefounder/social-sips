@@ -1,6 +1,6 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
-  Settings, 
   Edit3, 
   MapPin, 
   Star, 
@@ -18,20 +18,30 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { mockCurrentUser, mockRestaurants } from '@/data/mockData';
 import { cn } from '@/lib/utils';
+import { toast } from '@/hooks/use-toast';
 
 const Profile = () => {
+  const navigate = useNavigate();
   const [user] = useState(mockCurrentUser);
 
   const selectedRestaurantNames = user.selectedRestaurants
     .map(id => mockRestaurants.find(r => r.id === id)?.name)
     .filter(Boolean);
 
+  const handleSignOut = () => {
+    toast({
+      title: "Signed out",
+      description: "You have been signed out successfully.",
+    });
+    navigate('/');
+  };
+
   const menuItems = [
-    { icon: Edit3, label: 'Edit Profile', action: () => {} },
-    { icon: Bell, label: 'Notifications', action: () => {} },
-    { icon: Shield, label: 'Privacy & Safety', action: () => {} },
-    { icon: HelpCircle, label: 'Help & Support', action: () => {} },
-    { icon: LogOut, label: 'Sign Out', action: () => {}, danger: true },
+    { icon: Edit3, label: 'Edit Profile', action: () => toast({ title: "Coming soon", description: "Profile editing will be available soon." }) },
+    { icon: Bell, label: 'Notifications', action: () => toast({ title: "Coming soon", description: "Notification settings will be available soon." }) },
+    { icon: Shield, label: 'Privacy & Safety', action: () => toast({ title: "Coming soon", description: "Privacy settings will be available soon." }) },
+    { icon: HelpCircle, label: 'Help & Support', action: () => toast({ title: "Coming soon", description: "Help & Support will be available soon." }) },
+    { icon: LogOut, label: 'Sign Out', action: handleSignOut, danger: true },
   ];
 
   return (

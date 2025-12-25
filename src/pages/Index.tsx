@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Map, List, Filter, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Map, List, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { RestaurantMap } from '@/components/restaurant/RestaurantMap';
@@ -7,12 +8,12 @@ import { RestaurantCard } from '@/components/restaurant/RestaurantCard';
 import { Button } from '@/components/ui/button';
 import { restaurantApi } from '@/services/api';
 import { Restaurant } from '@/data/mockData';
-import { cn } from '@/lib/utils';
 
 type ViewMode = 'map' | 'list';
 type FilterType = 'all' | 'byob' | 'bar';
 
 const Index = () => {
+  const navigate = useNavigate();
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('map');
   const [filter, setFilter] = useState<FilterType>('all');
@@ -174,7 +175,7 @@ const Index = () => {
               variant="match"
               size="lg"
               className="rounded-full shadow-elevated px-6"
-              onClick={() => window.location.href = '/match'}
+              onClick={() => navigate('/match')}
             >
               <span className="text-lg mr-1">🍷</span>
               Find Someone to Drink With
