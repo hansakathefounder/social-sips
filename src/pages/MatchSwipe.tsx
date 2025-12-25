@@ -4,35 +4,66 @@ import { ArrowLeft, X, Heart, RotateCcw, Star } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { UserCard } from '@/components/matching/UserCard';
-import { matchingApi, userApi } from '@/services/api';
-import { User, mockCurrentUser, mockRestaurants } from '@/data/mockData';
+import { matchingService, userRestaurantService, restaurantService, DbProfile, DbRestaurant, profileService } from '@/services/supabaseApi';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
-import { cn } from '@/lib/utils';
+
+interface ProfileWithRestaurants extends DbProfile {
+  selectedRestaurants: string[];
+}
 
 const MatchSwipe = () => {
   const navigate = useNavigate();
-  const [users, setUsers] = useState<User[]>([]);
+  const { user, profile } = useAuth();
+  const [users, setUsers] = useState<ProfileWithRestaurants[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [showMatch, setShowMatch] = useState(false);
-  const [matchedUser, setMatchedUser] = useState<User | null>(null);
+  const [matchedUser, setMatchedUser] = useState<ProfileWithRestaurants | null>(null);
   const [direction, setDirection] = useState<'left' | 'right' | null>(null);
+  const [mySelectedRestaurants, setMySelectedRestaurants] = useState<string[]>([]);
+  const [restaurants, setRestaurants] = useState<DbRestaurant[]>([]);
+  const [swipeHistory, setSwipeHistory] = useState<string[]>([]);
 
   useEffect(() => {
-    loadPotentialMatches();
-  }, []);
+    if (user) {
+      loadPotentialMatches();
+    }
+  }, [user]);
 
   const loadPotentialMatches = async () => {
+    if (!user) return;
+    
     setLoading(true);
     try {
-      const selectedRestaurants = mockCurrentUser.selectedRestaurants.length > 0
-        ? mockCurrentUser.selectedRestaurants
-        : ['r1', 'r3', 'r6']; // Default if none selected
-      
-      const matches = await matchingApi.getPotentialMatches(selectedRestaurants);
+      // Load restaurants for name lookup
+      const allRestaurants = await restaurantService.getAll();
+      setRestaurants(allRestaurants);
+
+      // Load my selected restaurants
+      const mySelections = await userRestaurantService.getSelected(user.id);
+      setMySelectedRestaurants(mySelections);
+
+      if (mySelections.length === 0) {
+        toast({
+          title: "No restaurants selected",
+          description: "Please select some restaurants first",
+          variant: "destructive"
+        });
+        navigate('/match');
+        return;
+      }
+
+      // Get potential matches
+      const matches = await matchingService.getPotentialMatches(user.id);
       setUsers(matches);
     } catch (error) {
       console.error('Failed to load matches:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load potential matches",
+        variant: "destructive"
+      });
     } finally {
       setLoading(false);
     }
@@ -40,29 +71,24 @@ const MatchSwipe = () => {
 
   const currentUser = users[currentIndex];
 
-  const getMatchCount = (user: User) => {
-    const selectedRestaurants = mockCurrentUser.selectedRestaurants.length > 0
-      ? mockCurrentUser.selectedRestaurants
-      : ['r1', 'r3', 'r6'];
-    return matchingApi.getMatchCount(user, selectedRestaurants);
+  const getMatchCount = (userProfile: ProfileWithRestaurants): number => {
+    return userProfile.selectedRestaurants.filter(id => mySelectedRestaurants.includes(id)).length;
   };
 
-  const getMatchedRestaurantNames = (user: User) => {
-    const selectedRestaurants = mockCurrentUser.selectedRestaurants.length > 0
-      ? mockCurrentUser.selectedRestaurants
-      : ['r1', 'r3', 'r6'];
-    return user.selectedRestaurants
-      .filter(id => selectedRestaurants.includes(id))
-      .map(id => mockRestaurants.find(r => r.id === id)?.name || '');
+  const getMatchedRestaurantNames = (userProfile: ProfileWithRestaurants): string[] => {
+    return userProfile.selectedRestaurants
+      .filter(id => mySelectedRestaurants.includes(id))
+      .map(id => restaurants.find(r => r.id === id)?.name || '');
   };
 
   const handleSwipe = async (swipeDirection: 'left' | 'right') => {
-    if (!currentUser) return;
+    if (!currentUser || !user) return;
 
     setDirection(swipeDirection);
     
-    if (swipeDirection === 'right') {
-      const result = await matchingApi.swipe(currentUser.id, 'right');
+    try {
+      const result = await matchingService.swipe(user.id, currentUser.user_id, swipeDirection);
+      
       if (result.matched) {
         setMatchedUser(currentUser);
         setShowMatch(true);
@@ -71,6 +97,15 @@ const MatchSwipe = () => {
           description: `You and ${currentUser.name} both want to drink together!`,
         });
       }
+
+      setSwipeHistory(prev => [...prev, currentUser.user_id]);
+    } catch (error) {
+      console.error('Failed to record swipe:', error);
+      toast({
+        title: "Error",
+        description: "Failed to record your choice",
+        variant: "destructive"
+      });
     }
 
     setTimeout(() => {
@@ -82,8 +117,23 @@ const MatchSwipe = () => {
   const handleUndo = () => {
     if (currentIndex > 0) {
       setCurrentIndex(prev => prev - 1);
+      // Note: undo doesn't remove the swipe from database in this implementation
     }
   };
+
+  // Transform DbProfile to User format for UserCard
+  const transformToUser = (profileData: ProfileWithRestaurants) => ({
+    id: profileData.user_id,
+    name: profileData.name,
+    age: profileData.age || 0,
+    bio: profileData.bio || '',
+    avatar: profileData.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400',
+    interests: profileData.interests || [],
+    location: profileData.location || '',
+    favoriteDrink: profileData.favorite_drink || '',
+    selectedRestaurants: profileData.selectedRestaurants,
+    verified: true
+  });
 
   if (loading) {
     return (
@@ -104,7 +154,9 @@ const MatchSwipe = () => {
           No more matches
         </h2>
         <p className="text-muted-foreground text-center mb-6">
-          Check back later or try different restaurants
+          {users.length === 0 
+            ? "No one has selected the same restaurants yet. Check back later!" 
+            : "Check back later or try different restaurants"}
         </p>
         <div className="flex gap-3">
           <Link to="/match">
@@ -144,7 +196,7 @@ const MatchSwipe = () => {
         <AnimatePresence>
           {currentUser && (
             <motion.div
-              key={currentUser.id}
+              key={currentUser.user_id}
               className="absolute inset-4"
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ 
@@ -167,7 +219,7 @@ const MatchSwipe = () => {
               }}
             >
               <UserCard
-                user={currentUser}
+                user={transformToUser(currentUser)}
                 matchCount={getMatchCount(currentUser)}
                 matchedRestaurantNames={getMatchedRestaurantNames(currentUser)}
               />
@@ -190,7 +242,7 @@ const MatchSwipe = () => {
         {/* Background cards */}
         {users.slice(currentIndex + 1, currentIndex + 3).map((user, i) => (
           <div
-            key={user.id}
+            key={user.user_id}
             className="absolute inset-4 rounded-3xl bg-card opacity-50"
             style={{
               transform: `scale(${0.95 - i * 0.05}) translateY(${(i + 1) * 10}px)`,
@@ -265,14 +317,14 @@ const MatchSwipe = () => {
               <div className="flex justify-center mb-8">
                 <div className="relative">
                   <img
-                    src={mockCurrentUser.avatar}
+                    src={profile?.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400'}
                     alt="You"
                     className="w-24 h-24 rounded-full border-4 border-primary object-cover"
                   />
                 </div>
                 <div className="relative -ml-4">
                   <img
-                    src={matchedUser.avatar}
+                    src={matchedUser.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400'}
                     alt={matchedUser.name}
                     className="w-24 h-24 rounded-full border-4 border-drink-pink object-cover"
                   />
