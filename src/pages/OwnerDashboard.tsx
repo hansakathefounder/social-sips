@@ -10,7 +10,8 @@ import {
   Plus,
   Clock,
   CheckCircle2,
-  XCircle
+  XCircle,
+  LogOut
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -34,7 +35,7 @@ interface Reservation {
 
 const OwnerDashboard = () => {
   const navigate = useNavigate();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, signOut } = useAuth();
   const [restaurant, setRestaurant] = useState<DbRestaurant | null>(null);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -149,7 +150,17 @@ const OwnerDashboard = () => {
               </Button>
             </Link>
             <h1 className="font-display font-semibold">Create Your Restaurant</h1>
-            <div className="w-9" />
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={async () => {
+                await signOut();
+                navigate('/auth');
+              }}
+              aria-label="Log out"
+            >
+              <LogOut className="w-5 h-5" />
+            </Button>
           </div>
         </header>
 
@@ -281,8 +292,16 @@ const OwnerDashboard = () => {
             </Button>
           </Link>
           <h1 className="font-display font-semibold">Restaurant Dashboard</h1>
-          <Button variant="ghost" size="icon-sm">
-            <Edit3 className="w-5 h-5" />
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={async () => {
+              await signOut();
+              navigate('/auth');
+            }}
+            aria-label="Log out"
+          >
+            <LogOut className="w-5 h-5" />
           </Button>
         </div>
       </header>

@@ -33,16 +33,20 @@ const transformRestaurant = (r: DbRestaurant): Restaurant => ({
 
 const Match = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [restaurants, setRestaurants] = useState<DbRestaurant[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!authLoading && !user) {
+      navigate('/auth');
+      return;
+    }
     if (user) {
       loadRestaurants();
     }
-  }, [user]);
+  }, [user, authLoading, navigate]);
 
   const loadRestaurants = async () => {
     setLoading(true);
