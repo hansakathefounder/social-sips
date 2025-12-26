@@ -38,12 +38,18 @@ const Chat = () => {
     scrollToBottom();
   }, [messages]);
 
-  // Subscribe to new messages
+  // Subscribe to new messages (realtime)
   useEffect(() => {
     if (!matchId) return;
     
     const subscription = chatService.subscribeToMessages(matchId, (newMsg) => {
-      setMessages(prev => [...prev, newMsg]);
+      // Avoid duplicates - check if message already exists
+      setMessages(prev => {
+        if (prev.some(m => m.id === newMsg.id)) {
+          return prev;
+        }
+        return [...prev, newMsg];
+      });
     });
 
     return () => {
