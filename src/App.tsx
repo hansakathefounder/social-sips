@@ -14,6 +14,7 @@ import MatchSwipe from "./pages/MatchSwipe";
 import Matches from "./pages/Matches";
 import Chat from "./pages/Chat";
 import OwnerDashboard from "./pages/OwnerDashboard";
+import AdminDashboard from "./pages/AdminDashboard";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -38,6 +39,7 @@ const App = () => (
               <Route path="/matches" element={<Matches />} />
               <Route path="/chat/:matchId" element={<Chat />} />
               <Route path="/owner" element={<OwnerDashboard />} />
+              <Route path="/admin" element={<AdminDashboard />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
