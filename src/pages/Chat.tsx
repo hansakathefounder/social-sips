@@ -40,14 +40,12 @@ const Chat = () => {
 
   // Subscribe to new messages (realtime)
   useEffect(() => {
-    if (!matchId) return;
-    
+    if (!matchId || !user) return;
+
     const subscription = chatService.subscribeToMessages(matchId, (newMsg) => {
       // Avoid duplicates - check if message already exists
-      setMessages(prev => {
-        if (prev.some(m => m.id === newMsg.id)) {
-          return prev;
-        }
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === newMsg.id)) return prev;
         return [...prev, newMsg];
       });
     });
@@ -55,7 +53,7 @@ const Chat = () => {
     return () => {
       subscription.unsubscribe();
     };
-  }, [matchId]);
+  }, [matchId, user?.id]);
 
   const loadMatchAndMessages = async () => {
     if (!matchId || !user) return;
