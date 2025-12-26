@@ -154,6 +154,27 @@ const MatchSwipe = () => {
     );
   }
 
+  const handleResetSwipes = async () => {
+    if (!user) return;
+    
+    try {
+      await matchingService.resetLeftSwipes(user.id);
+      toast({
+        title: "Swipes reset",
+        description: "You can now see previously passed profiles again!",
+      });
+      setCurrentIndex(0);
+      loadPotentialMatches();
+    } catch (error) {
+      console.error('Failed to reset swipes:', error);
+      toast({
+        title: "Error",
+        description: "Failed to reset swipes. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+
   if (currentIndex >= users.length) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
@@ -166,13 +187,23 @@ const MatchSwipe = () => {
             ? "No one has selected the same restaurants yet. Check back later!" 
             : "Check back later or try different restaurants"}
         </p>
-        <div className="flex gap-3">
-          <Link to="/match">
-            <Button variant="outline">Change Spots</Button>
-          </Link>
-          <Link to="/matches">
-            <Button variant="gold">View Matches</Button>
-          </Link>
+        <div className="flex flex-col gap-3 w-full max-w-xs">
+          <Button 
+            variant="default" 
+            onClick={handleResetSwipes}
+            className="w-full"
+          >
+            <RotateCcw className="w-4 h-4 mr-2" />
+            Show Passed Profiles Again
+          </Button>
+          <div className="flex gap-3">
+            <Link to="/match" className="flex-1">
+              <Button variant="outline" className="w-full">Change Spots</Button>
+            </Link>
+            <Link to="/matches" className="flex-1">
+              <Button variant="gold" className="w-full">View Matches</Button>
+            </Link>
+          </div>
         </div>
       </div>
     );
