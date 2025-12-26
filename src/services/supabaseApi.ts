@@ -323,6 +323,16 @@ export const matchingService = {
     
     if (error) throw error;
     return data || [];
+  },
+
+  resetLeftSwipes: async (userId: string): Promise<void> => {
+    const { error } = await supabase
+      .from('swipes')
+      .delete()
+      .eq('swiper_id', userId)
+      .eq('direction', 'left');
+    
+    if (error) throw error;
   }
 };
 
