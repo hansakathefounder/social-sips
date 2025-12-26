@@ -231,24 +231,26 @@ export const matchingService = {
       .eq('swiped_id', swipedId)
       .maybeSingle();
 
-    if (existingSwipe) {
-      console.log('Swipe already exists, skipping insert');
-      return { matched: false };
+    let swipeRecorded = false;
+    
+    if (!existingSwipe) {
+      // Record the swipe
+      const { error: swipeError } = await supabase
+        .from('swipes')
+        .insert({ swiper_id: swiperId, swiped_id: swipedId, direction });
+
+      if (swipeError) {
+        console.error('Swipe insert error:', swipeError);
+        throw swipeError;
+      }
+      swipeRecorded = true;
+      console.log('Swipe recorded successfully');
+    } else {
+      console.log('Swipe already exists');
     }
 
-    // Record the swipe
-    const { error: swipeError } = await supabase
-      .from('swipes')
-      .insert({ swiper_id: swiperId, swiped_id: swipedId, direction });
-
-    if (swipeError) {
-      console.error('Swipe insert error:', swipeError);
-      throw swipeError;
-    }
-
-    console.log('Swipe recorded successfully');
-
-    if (direction === 'right') {
+    // Check for match even if swipe existed (in case match wasn't created before)
+    if (direction === 'right' || (existingSwipe && existingSwipe.direction === 'right')) {
       // Check if the other user also swiped right
       const { data: mutualSwipe } = await supabase
         .from('swipes')
