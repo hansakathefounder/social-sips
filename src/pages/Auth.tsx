@@ -1,19 +1,22 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Wine, Mail, Lock, User, ArrowLeft, Eye, EyeOff } from 'lucide-react';
+import { Wine, Mail, Lock, User, ArrowLeft, Eye, EyeOff, Store } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
 type AuthMode = 'signin' | 'signup';
+type UserType = 'user' | 'restaurant_owner';
 
 const Auth = () => {
   const navigate = useNavigate();
   const { user, signIn, signUp, loading } = useAuth();
   const [mode, setMode] = useState<AuthMode>('signin');
+  const [userType, setUserType] = useState<UserType>('user');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -22,9 +25,27 @@ const Auth = () => {
 
   useEffect(() => {
     if (!loading && user) {
+      // Check if user is restaurant owner and redirect accordingly
+      checkUserRole();
+    }
+  }, [user, loading]);
+
+  const checkUserRole = async () => {
+    if (!user) return;
+    
+    const { data: roles } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id);
+    
+    const isOwner = roles?.some(r => r.role === 'restaurant_owner');
+    
+    if (isOwner) {
+      navigate('/owner');
+    } else {
       navigate('/');
     }
-  }, [user, loading, navigate]);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,11 +71,31 @@ const Auth = () => {
             variant: "destructive"
           });
         } else {
+          // If restaurant owner, add role
+          if (userType === 'restaurant_owner') {
+            const { data: { user: newUser } } = await supabase.auth.getUser();
+            if (newUser) {
+              await supabase.from('user_roles').insert({
+                user_id: newUser.id,
+                role: 'restaurant_owner'
+              });
+            }
+          }
+          
           toast({
-            title: "Welcome to DrinkWithMe! 🍷",
-            description: "Your account has been created successfully."
+            title: userType === 'restaurant_owner' 
+              ? "Restaurant account created! 🍽️" 
+              : "Welcome to DrinkWithMe! 🍷",
+            description: userType === 'restaurant_owner'
+              ? "You can now set up your restaurant."
+              : "Your account has been created successfully."
           });
-          navigate('/');
+          
+          if (userType === 'restaurant_owner') {
+            navigate('/owner');
+          } else {
+            navigate('/');
+          }
         }
       } else {
         const { error } = await signIn(email, password);
@@ -69,7 +110,7 @@ const Auth = () => {
             title: "Welcome back! 🥂",
             description: "You've successfully signed in."
           });
-          navigate('/');
+          // Role check happens in useEffect
         }
       }
     } finally {
@@ -118,6 +159,42 @@ const Auth = () => {
           </p>
         </motion.div>
 
+        {/* User Type Selection (Signup only) */}
+        {mode === 'signup' && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="w-full max-w-sm mb-6"
+          >
+            <div className="flex gap-2 p-1 rounded-xl bg-secondary">
+              <button
+                type="button"
+                onClick={() => setUserType('user')}
+                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-medium transition-all ${
+                  userType === 'user'
+                    ? 'bg-card text-foreground shadow'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <User className="w-4 h-4" />
+                Regular User
+              </button>
+              <button
+                type="button"
+                onClick={() => setUserType('restaurant_owner')}
+                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-medium transition-all ${
+                  userType === 'restaurant_owner'
+                    ? 'bg-card text-foreground shadow'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Store className="w-4 h-4" />
+                Restaurant Owner
+              </button>
+            </div>
+          </motion.div>
+        )}
+
         {/* Form */}
         <motion.form
           initial={{ opacity: 0, y: 20 }}
@@ -134,13 +211,15 @@ const Auth = () => {
                 exit={{ opacity: 0, height: 0 }}
                 className="space-y-2"
               >
-                <Label htmlFor="name" className="text-foreground">Name</Label>
+                <Label htmlFor="name" className="text-foreground">
+                  {userType === 'restaurant_owner' ? 'Owner Name' : 'Name'}
+                </Label>
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
                     id="name"
                     type="text"
-                    placeholder="Your name"
+                    placeholder={userType === 'restaurant_owner' ? 'Restaurant owner name' : 'Your name'}
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     className="pl-10 bg-secondary border-border"
@@ -199,7 +278,8 @@ const Auth = () => {
             {isSubmitting ? (
               <div className="w-5 h-5 border-2 border-drink-dark border-t-transparent rounded-full animate-spin" />
             ) : (
-              mode === 'signin' ? 'Sign In' : 'Create Account'
+              mode === 'signin' ? 'Sign In' : 
+              userType === 'restaurant_owner' ? 'Create Restaurant Account' : 'Create Account'
             )}
           </Button>
         </motion.form>

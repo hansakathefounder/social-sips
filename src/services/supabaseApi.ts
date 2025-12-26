@@ -545,3 +545,83 @@ export const ownerService = {
     return !!data;
   }
 };
+
+// Events APIs
+export interface DbEvent {
+  id: string;
+  restaurant_id: string;
+  title: string;
+  description: string | null;
+  poster_url: string | null;
+  event_date: string;
+  event_time: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export const eventsService = {
+  getByRestaurant: async (restaurantId: string): Promise<DbEvent[]> => {
+    const { data, error } = await supabase
+      .from('events')
+      .select('*')
+      .eq('restaurant_id', restaurantId)
+      .order('event_date', { ascending: true });
+    
+    if (error) throw error;
+    return data || [];
+  },
+
+  getUpcoming: async (): Promise<(DbEvent & { restaurant: DbRestaurant })[]> => {
+    const today = new Date().toISOString().split('T')[0];
+    const { data, error } = await supabase
+      .from('events')
+      .select(`
+        *,
+        restaurant:restaurants(*)
+      `)
+      .gte('event_date', today)
+      .order('event_date', { ascending: true });
+    
+    if (error) throw error;
+    return (data as any) || [];
+  },
+
+  create: async (event: {
+    restaurant_id: string;
+    title: string;
+    description?: string;
+    poster_url?: string;
+    event_date: string;
+    event_time?: string;
+  }): Promise<DbEvent> => {
+    const { data, error } = await supabase
+      .from('events')
+      .insert(event)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
+  },
+
+  update: async (eventId: string, updateData: Partial<DbEvent>): Promise<DbEvent> => {
+    const { data, error } = await supabase
+      .from('events')
+      .update(updateData)
+      .eq('id', eventId)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
+  },
+
+  delete: async (eventId: string): Promise<void> => {
+    const { error } = await supabase
+      .from('events')
+      .delete()
+      .eq('id', eventId);
+    
+    if (error) throw error;
+  }
+};

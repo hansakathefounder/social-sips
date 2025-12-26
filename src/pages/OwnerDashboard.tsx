@@ -11,14 +11,16 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
-  LogOut
+  LogOut,
+  Trash2,
+  Image
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ownerService, DbRestaurant } from '@/services/supabaseApi';
+import { ownerService, eventsService, DbRestaurant, DbEvent } from '@/services/supabaseApi';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -38,8 +40,9 @@ const OwnerDashboard = () => {
   const { user, loading: authLoading, signOut } = useAuth();
   const [restaurant, setRestaurant] = useState<DbRestaurant | null>(null);
   const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [events, setEvents] = useState<DbEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'reservations' | 'create'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'reservations' | 'events' | 'create'>('overview');
   
   // Create restaurant form
   const [newRestaurant, setNewRestaurant] = useState({
@@ -53,6 +56,17 @@ const OwnerDashboard = () => {
     phone: ''
   });
   const [creating, setCreating] = useState(false);
+
+  // Event form
+  const [showEventForm, setShowEventForm] = useState(false);
+  const [newEvent, setNewEvent] = useState({
+    title: '',
+    description: '',
+    poster_url: '',
+    event_date: '',
+    event_time: ''
+  });
+  const [creatingEvent, setCreatingEvent] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -73,8 +87,12 @@ const OwnerDashboard = () => {
       setRestaurant(restaurantData);
       
       if (restaurantData) {
-        const reservationsData = await ownerService.getReservations(restaurantData.id);
+        const [reservationsData, eventsData] = await Promise.all([
+          ownerService.getReservations(restaurantData.id),
+          eventsService.getByRestaurant(restaurantData.id)
+        ]);
         setReservations(reservationsData as Reservation[]);
+        setEvents(eventsData);
       }
     } catch (error) {
       console.error('Failed to load data:', error);
@@ -85,6 +103,67 @@ const OwnerDashboard = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCreateEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!restaurant) return;
+    
+    if (!newEvent.title.trim() || !newEvent.event_date) {
+      toast({
+        title: "Missing fields",
+        description: "Title and date are required",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    setCreatingEvent(true);
+    try {
+      const created = await eventsService.create({
+        restaurant_id: restaurant.id,
+        title: newEvent.title,
+        description: newEvent.description || undefined,
+        poster_url: newEvent.poster_url || undefined,
+        event_date: newEvent.event_date,
+        event_time: newEvent.event_time || undefined
+      });
+      
+      setEvents(prev => [...prev, created]);
+      setNewEvent({ title: '', description: '', poster_url: '', event_date: '', event_time: '' });
+      setShowEventForm(false);
+      toast({
+        title: "Event created! 🎉",
+        description: "Your event is now visible to users"
+      });
+    } catch (error: any) {
+      console.error('Failed to create event:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create event",
+        variant: "destructive"
+      });
+    } finally {
+      setCreatingEvent(false);
+    }
+  };
+
+  const handleDeleteEvent = async (eventId: string) => {
+    try {
+      await eventsService.delete(eventId);
+      setEvents(prev => prev.filter(e => e.id !== eventId));
+      toast({
+        title: "Event deleted",
+        description: "The event has been removed"
+      });
+    } catch (error) {
+      console.error('Failed to delete event:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete event",
+        variant: "destructive"
+      });
     }
   };
 
@@ -374,7 +453,7 @@ const OwnerDashboard = () => {
 
         {/* Tabs */}
         <div className="flex gap-1 p-1 rounded-xl bg-secondary mb-4 overflow-x-auto">
-          {(['overview', 'reservations'] as const).map((tab) => (
+          {(['overview', 'reservations', 'events'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -401,9 +480,13 @@ const OwnerDashboard = () => {
             <div className="glass rounded-xl p-4">
               <h3 className="font-semibold text-foreground mb-3">Quick Actions</h3>
               <div className="grid grid-cols-2 gap-2">
-                <Button variant="outline" className="justify-start gap-2">
-                  <Plus className="w-4 h-4" />
-                  Add Menu Item
+                <Button 
+                  variant="outline" 
+                  className="justify-start gap-2"
+                  onClick={() => setActiveTab('events')}
+                >
+                  <Calendar className="w-4 h-4" />
+                  Add Event
                 </Button>
                 <Button variant="outline" className="justify-start gap-2">
                   <Camera className="w-4 h-4" />
@@ -500,6 +583,197 @@ const OwnerDashboard = () => {
                   </div>
                 </div>
               ))
+            )}
+          </motion.div>
+        )}
+
+        {activeTab === 'events' && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="space-y-4"
+          >
+            {/* Add Event Button */}
+            <Button 
+              variant="gold" 
+              className="w-full gap-2"
+              onClick={() => setShowEventForm(true)}
+            >
+              <Plus className="w-4 h-4" />
+              Create New Event
+            </Button>
+
+            {/* Event Form Modal */}
+            <AnimatePresence>
+              {showEventForm && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  className="glass rounded-2xl p-4"
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-semibold text-foreground">New Event</h3>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => setShowEventForm(false)}
+                    >
+                      <XCircle className="w-5 h-5" />
+                    </Button>
+                  </div>
+                  
+                  <form onSubmit={handleCreateEvent} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="eventTitle">Event Title *</Label>
+                      <Input
+                        id="eventTitle"
+                        value={newEvent.title}
+                        onChange={(e) => setNewEvent(prev => ({ ...prev, title: e.target.value }))}
+                        placeholder="Live Music Night"
+                        className="bg-secondary"
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="eventDate">Event Date *</Label>
+                      <Input
+                        id="eventDate"
+                        type="date"
+                        value={newEvent.event_date}
+                        onChange={(e) => setNewEvent(prev => ({ ...prev, event_date: e.target.value }))}
+                        className="bg-secondary"
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="eventTime">Event Time</Label>
+                      <Input
+                        id="eventTime"
+                        type="time"
+                        value={newEvent.event_time}
+                        onChange={(e) => setNewEvent(prev => ({ ...prev, event_time: e.target.value }))}
+                        className="bg-secondary"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="eventDesc">Description</Label>
+                      <Input
+                        id="eventDesc"
+                        value={newEvent.description}
+                        onChange={(e) => setNewEvent(prev => ({ ...prev, description: e.target.value }))}
+                        placeholder="Join us for an amazing night..."
+                        className="bg-secondary"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="posterUrl">Poster Image URL</Label>
+                      <Input
+                        id="posterUrl"
+                        value={newEvent.poster_url}
+                        onChange={(e) => setNewEvent(prev => ({ ...prev, poster_url: e.target.value }))}
+                        placeholder="https://example.com/poster.jpg"
+                        className="bg-secondary"
+                      />
+                      {newEvent.poster_url && (
+                        <div className="mt-2 rounded-lg overflow-hidden">
+                          <img 
+                            src={newEvent.poster_url} 
+                            alt="Event poster preview"
+                            className="w-full h-40 object-cover"
+                            onError={(e) => (e.currentTarget.style.display = 'none')}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => setShowEventForm(false)}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="submit"
+                        variant="gold"
+                        className="flex-1"
+                        disabled={creatingEvent}
+                      >
+                        {creatingEvent ? (
+                          <div className="w-5 h-5 border-2 border-background border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          'Create Event'
+                        )}
+                      </Button>
+                    </div>
+                  </form>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Events List */}
+            {events.length === 0 && !showEventForm ? (
+              <div className="text-center py-12">
+                <Image className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <h3 className="font-display font-semibold text-foreground mb-2">
+                  No events yet
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Create events to attract more customers
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-4">
+                {events.map((event) => (
+                  <motion.div
+                    key={event.id}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="glass rounded-xl overflow-hidden"
+                  >
+                    {event.poster_url && (
+                      <img 
+                        src={event.poster_url} 
+                        alt={event.title}
+                        className="w-full h-48 object-cover"
+                      />
+                    )}
+                    <div className="p-4">
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <h4 className="font-semibold text-foreground">{event.title}</h4>
+                          <p className="text-sm text-muted-foreground">
+                            {new Date(event.event_date).toLocaleDateString('en-US', {
+                              weekday: 'short',
+                              month: 'short',
+                              day: 'numeric'
+                            })}
+                            {event.event_time && ` at ${event.event_time}`}
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-destructive"
+                          onClick={() => handleDeleteEvent(event.id)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                      {event.description && (
+                        <p className="text-sm text-muted-foreground">{event.description}</p>
+                      )}
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
             )}
           </motion.div>
         )}
