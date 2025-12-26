@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { RestaurantMap } from '@/components/restaurant/RestaurantMap';
 import { RestaurantCard } from '@/components/restaurant/RestaurantCard';
+import { AddRestaurantDialog } from '@/components/restaurant/AddRestaurantDialog';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -75,9 +76,10 @@ const Index = () => {
   return (
     <AppLayout>
       <div className="relative h-[calc(100vh-56px-80px)]">
-        {/* Auth Button - Top Right */}
-        {!authLoading && !user && (
-          <div className="absolute top-4 right-4 z-50">
+        {/* Auth Button & Add Restaurant - Top Right */}
+        <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
+          {user && <AddRestaurantDialog onSuccess={loadRestaurants} />}
+          {!authLoading && !user && (
             <Button
               variant="gold"
               size="sm"
@@ -87,8 +89,8 @@ const Index = () => {
               <LogIn className="w-4 h-4" />
               Sign In
             </Button>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* View Toggle & Filters */}
         <div className="absolute top-4 left-4 z-40 flex flex-wrap items-center gap-2">

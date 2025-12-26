@@ -1,6 +1,8 @@
 // Supabase API service for DrinkWithMe.lk
 import { supabase } from '@/integrations/supabase/client';
 
+export type RestaurantStatus = 'pending' | 'approved' | 'rejected';
+
 export interface DbRestaurant {
   id: string;
   owner_id: string | null;
@@ -21,6 +23,14 @@ export interface DbRestaurant {
   features: string[] | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface DbRestaurantWithStatus extends DbRestaurant {
+  status: RestaurantStatus;
+  created_by: string | null;
+  approved_by: string | null;
+  submitted_at: string | null;
+  approved_at: string | null;
 }
 
 export interface DbProfile {
@@ -62,6 +72,7 @@ export const restaurantService = {
     const { data, error } = await supabase
       .from('restaurants')
       .select('*')
+      .eq('status', 'approved')
       .order('rating', { ascending: false });
     
     if (error) throw error;
@@ -94,7 +105,7 @@ export const restaurantService = {
     minRating?: number;
     city?: string;
   }): Promise<DbRestaurant[]> => {
-    let query = supabase.from('restaurants').select('*');
+    let query = supabase.from('restaurants').select('*').eq('status', 'approved');
     
     if (filters.isByob !== undefined) {
       query = query.eq('is_byob', filters.isByob);
@@ -623,5 +634,138 @@ export const eventsService = {
       .eq('id', eventId);
     
     if (error) throw error;
+  }
+};
+
+// Restaurant Submission APIs (for users submitting new restaurants)
+export const restaurantSubmissionService = {
+  submit: async (userId: string, restaurant: {
+    name: string;
+    address: string;
+    latitude: number;
+    longitude: number;
+    is_byob?: boolean;
+    description?: string;
+    cuisine?: string;
+    phone?: string;
+    website?: string;
+  }): Promise<DbRestaurantWithStatus> => {
+    const { data, error } = await supabase
+      .from('restaurants')
+      .insert({
+        ...restaurant,
+        created_by: userId,
+        is_byob: restaurant.is_byob ?? false,
+        status: 'pending',
+      })
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data as DbRestaurantWithStatus;
+  },
+
+  getMySubmissions: async (userId: string): Promise<DbRestaurantWithStatus[]> => {
+    const { data, error } = await supabase
+      .from('restaurants')
+      .select('*')
+      .or(`created_by.eq.${userId},owner_id.eq.${userId}`)
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    return (data as DbRestaurantWithStatus[]) || [];
+  },
+
+  update: async (restaurantId: string, updateData: {
+    name?: string;
+    address?: string;
+    description?: string;
+    cuisine?: string;
+    phone?: string;
+    website?: string;
+    is_byob?: boolean;
+    latitude?: number;
+    longitude?: number;
+    photos?: string[];
+    features?: string[];
+  }): Promise<DbRestaurantWithStatus> => {
+    const { data, error } = await supabase
+      .from('restaurants')
+      .update(updateData)
+      .eq('id', restaurantId)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data as DbRestaurantWithStatus;
+  }
+};
+
+// Admin APIs
+export const adminService = {
+  hasAdminRole: async (userId: string): Promise<boolean> => {
+    const { data, error } = await supabase
+      .from('user_roles')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('role', 'admin')
+      .maybeSingle();
+    
+    if (error) throw error;
+    return !!data;
+  },
+
+  getRestaurantsByStatus: async (status: RestaurantStatus): Promise<DbRestaurantWithStatus[]> => {
+    const { data, error } = await supabase
+      .from('restaurants')
+      .select('*')
+      .eq('status', status)
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    return (data as DbRestaurantWithStatus[]) || [];
+  },
+
+  getAllPendingRestaurants: async (): Promise<DbRestaurantWithStatus[]> => {
+    const { data, error } = await supabase
+      .from('restaurants')
+      .select('*')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: true });
+    
+    if (error) throw error;
+    return (data as DbRestaurantWithStatus[]) || [];
+  },
+
+  approveRestaurant: async (restaurantId: string, adminId: string): Promise<DbRestaurantWithStatus> => {
+    const { data, error } = await supabase
+      .from('restaurants')
+      .update({
+        status: 'approved',
+        approved_by: adminId,
+        approved_at: new Date().toISOString(),
+      })
+      .eq('id', restaurantId)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data as DbRestaurantWithStatus;
+  },
+
+  rejectRestaurant: async (restaurantId: string, adminId: string): Promise<DbRestaurantWithStatus> => {
+    const { data, error } = await supabase
+      .from('restaurants')
+      .update({
+        status: 'rejected',
+        approved_by: adminId,
+        approved_at: new Date().toISOString(),
+      })
+      .eq('id', restaurantId)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data as DbRestaurantWithStatus;
   }
 };

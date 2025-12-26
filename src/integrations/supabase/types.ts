@@ -220,7 +220,10 @@ export type Database = {
       restaurants: {
         Row: {
           address: string
+          approved_at: string | null
+          approved_by: string | null
           created_at: string
+          created_by: string | null
           cuisine: string | null
           description: string | null
           features: string[] | null
@@ -236,12 +239,17 @@ export type Database = {
           price_range: number | null
           rating: number | null
           review_count: number | null
+          status: Database["public"]["Enums"]["restaurant_status"]
+          submitted_at: string | null
           updated_at: string
           website: string | null
         }
         Insert: {
           address: string
+          approved_at?: string | null
+          approved_by?: string | null
           created_at?: string
+          created_by?: string | null
           cuisine?: string | null
           description?: string | null
           features?: string[] | null
@@ -257,12 +265,17 @@ export type Database = {
           price_range?: number | null
           rating?: number | null
           review_count?: number | null
+          status?: Database["public"]["Enums"]["restaurant_status"]
+          submitted_at?: string | null
           updated_at?: string
           website?: string | null
         }
         Update: {
           address?: string
+          approved_at?: string | null
+          approved_by?: string | null
           created_at?: string
+          created_by?: string | null
           cuisine?: string | null
           description?: string | null
           features?: string[] | null
@@ -278,6 +291,8 @@ export type Database = {
           price_range?: number | null
           rating?: number | null
           review_count?: number | null
+          status?: Database["public"]["Enums"]["restaurant_status"]
+          submitted_at?: string | null
           updated_at?: string
           website?: string | null
         }
@@ -404,6 +419,7 @@ export type Database = {
     }
     Enums: {
       app_role: "user" | "restaurant_owner" | "admin"
+      restaurant_status: "pending" | "approved" | "rejected"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -532,6 +548,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["user", "restaurant_owner", "admin"],
+      restaurant_status: ["pending", "approved", "rejected"],
     },
   },
 } as const
