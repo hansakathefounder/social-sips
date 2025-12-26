@@ -1,41 +1,90 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Send, MoreVertical, Phone, Video } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { chatApi, matchingApi } from '@/services/api';
-import { Message, mockMatches, mockRestaurants } from '@/data/mockData';
+import { chatService, matchingService, profileService, restaurantService, DbMessage, DbMatch, DbProfile, DbRestaurant } from '@/services/supabaseApi';
+import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
+
+interface MatchData {
+  match: DbMatch;
+  otherUser: DbProfile;
+  restaurant: DbRestaurant | null;
+}
 
 const Chat = () => {
   const { matchId } = useParams<{ matchId: string }>();
-  const [messages, setMessages] = useState<Message[]>([]);
+  const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
+  const [messages, setMessages] = useState<DbMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
+  const [matchData, setMatchData] = useState<MatchData | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const match = mockMatches.find(m => m.id === matchId);
-
   useEffect(() => {
-    if (matchId) {
-      loadMessages();
+    if (!authLoading && !user) {
+      navigate('/auth');
+      return;
     }
-  }, [matchId]);
+    if (matchId && user) {
+      loadMatchAndMessages();
+    }
+  }, [matchId, user, authLoading, navigate]);
 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
-  const loadMessages = async () => {
+  // Subscribe to new messages
+  useEffect(() => {
     if (!matchId) return;
+    
+    const subscription = chatService.subscribeToMessages(matchId, (newMsg) => {
+      setMessages(prev => [...prev, newMsg]);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [matchId]);
+
+  const loadMatchAndMessages = async () => {
+    if (!matchId || !user) return;
     setLoading(true);
     try {
-      const data = await chatApi.getMessages(matchId);
+      // Load match data
+      const matches = await matchingService.getMatches(user.id);
+      const match = matches.find(m => m.id === matchId);
+      
+      if (!match) {
+        setMatchData(null);
+        setLoading(false);
+        return;
+      }
+
+      // Load other user's profile
+      const otherUserId = match.user1_id === user.id ? match.user2_id : match.user1_id;
+      const otherUser = await profileService.getById(otherUserId);
+      
+      // Load restaurant if exists
+      let restaurant: DbRestaurant | null = null;
+      if (match.shared_restaurant_id) {
+        restaurant = await restaurantService.getById(match.shared_restaurant_id);
+      }
+
+      if (otherUser) {
+        setMatchData({ match, otherUser, restaurant });
+      }
+
+      // Load messages
+      const data = await chatService.getMessages(matchId);
       setMessages(data);
-      await chatApi.markAsSeen(matchId);
+      await chatService.markAsSeen(matchId, user.id);
     } catch (error) {
-      console.error('Failed to load messages:', error);
+      console.error('Failed to load chat:', error);
     } finally {
       setLoading(false);
     }
@@ -46,10 +95,10 @@ const Chat = () => {
   };
 
   const handleSend = async () => {
-    if (!newMessage.trim() || !matchId) return;
+    if (!newMessage.trim() || !matchId || !user) return;
 
     try {
-      const message = await chatApi.sendMessage(matchId, newMessage.trim());
+      const message = await chatService.sendMessage(matchId, user.id, newMessage.trim());
       setMessages(prev => [...prev, message]);
       setNewMessage('');
     } catch (error) {
@@ -76,15 +125,15 @@ const Chat = () => {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
-  const getMatchedRestaurantNames = () => {
-    if (!match) return '';
-    return match.matchedRestaurants
-      .map(id => mockRestaurants.find(r => r.id === id)?.name)
-      .filter(Boolean)
-      .join(', ');
-  };
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+      </div>
+    );
+  }
 
-  if (!match) {
+  if (!matchData) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
         <p className="text-muted-foreground mb-4">Chat not found</p>
@@ -95,10 +144,12 @@ const Chat = () => {
     );
   }
 
+  const { otherUser, restaurant } = matchData;
+
   // Group messages by date
-  const groupedMessages: { date: string; messages: Message[] }[] = [];
+  const groupedMessages: { date: string; messages: DbMessage[] }[] = [];
   messages.forEach(msg => {
-    const date = formatDate(msg.timestamp);
+    const date = formatDate(msg.created_at);
     const lastGroup = groupedMessages[groupedMessages.length - 1];
     if (lastGroup?.date === date) {
       lastGroup.messages.push(msg);
@@ -120,19 +171,21 @@ const Chat = () => {
         <div className="flex items-center gap-3 flex-1">
           <div className="relative">
             <img
-              src={match.user.avatar}
-              alt={match.user.name}
+              src={otherUser.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400'}
+              alt={otherUser.name}
               className="w-10 h-10 rounded-full object-cover"
             />
             <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-drink-green border-2 border-card" />
           </div>
           <div className="flex-1 min-w-0">
             <h1 className="font-semibold text-foreground truncate">
-              {match.user.name}
+              {otherUser.name}
             </h1>
-            <p className="text-xs text-primary truncate">
-              📍 {getMatchedRestaurantNames()}
-            </p>
+            {restaurant && (
+              <p className="text-xs text-primary truncate">
+                📍 {restaurant.name}
+              </p>
+            )}
           </div>
         </div>
 
@@ -151,13 +204,17 @@ const Chat = () => {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {loading ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+        {messages.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-center">
+            <div className="text-4xl mb-4">🍷</div>
+            <h3 className="font-semibold text-foreground mb-2">Say hello!</h3>
+            <p className="text-sm text-muted-foreground">
+              You matched at {restaurant?.name || 'a shared spot'}. Start the conversation!
+            </p>
           </div>
         ) : (
           <AnimatePresence initial={false}>
-            {groupedMessages.map((group, groupIndex) => (
+            {groupedMessages.map((group) => (
               <div key={group.date}>
                 {/* Date Divider */}
                 <div className="flex items-center gap-3 my-4">
@@ -170,7 +227,7 @@ const Chat = () => {
 
                 {/* Messages */}
                 {group.messages.map((message, i) => {
-                  const isOwn = message.senderId === 'current';
+                  const isOwn = message.sender_id === user?.id;
                   return (
                     <motion.div
                       key={message.id}
@@ -188,13 +245,13 @@ const Chat = () => {
                           ? "gradient-gold text-primary-foreground rounded-br-md" 
                           : "bg-card text-foreground rounded-bl-md"
                       )}>
-                        <p className="text-sm">{message.text}</p>
+                        <p className="text-sm">{message.content}</p>
                         <div className={cn(
                           "flex items-center justify-end gap-1 mt-1",
                           isOwn ? "text-primary-foreground/70" : "text-muted-foreground"
                         )}>
                           <span className="text-[10px]">
-                            {formatTime(message.timestamp)}
+                            {formatTime(message.created_at)}
                           </span>
                           {isOwn && (
                             <span className="text-[10px]">
