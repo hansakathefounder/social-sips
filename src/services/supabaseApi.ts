@@ -92,6 +92,7 @@ export const restaurantService = {
   getByFilters: async (filters: {
     isByob?: boolean;
     minRating?: number;
+    city?: string;
   }): Promise<DbRestaurant[]> => {
     let query = supabase.from('restaurants').select('*');
     
@@ -101,6 +102,10 @@ export const restaurantService = {
     
     if (filters.minRating) {
       query = query.gte('rating', filters.minRating);
+    }
+    
+    if (filters.city) {
+      query = query.ilike('address', `%${filters.city}%`);
     }
     
     const { data, error } = await query.order('rating', { ascending: false });

@@ -1,6 +1,7 @@
 import { Bell, Settings } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 interface HeaderProps {
   title?: string;
@@ -33,9 +34,10 @@ export const Header = ({ title, showLogo = true, rightAction }: HeaderProps) => 
         <div className="flex items-center gap-2">
           {rightAction || (
             <>
+              <ThemeToggle />
               <Button variant="ghost" size="icon-sm" className="relative">
                 <Bell className="w-5 h-5" />
-                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-drink-red" />
+                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-destructive" />
               </Button>
               <Link to="/settings">
                 <Button variant="ghost" size="icon-sm">
